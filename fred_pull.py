@@ -20,9 +20,16 @@ import requests
 import pandas as pd
 from pathlib import Path
 
-API_KEY = os.environ.get("FRED_API_KEY")
-if not API_KEY:
-    sys.exit("ERROR: Set the FRED_API_KEY environment variable before running this script.")
+# Read API key from env var, or Streamlit secrets if running in Cloud
+def get_api_key():
+    key = os.environ.get("FRED_API_KEY")
+    if not key:
+        try:
+            import streamlit as st
+            key = st.secrets.get("FRED_API_KEY")
+        except Exception:
+            pass
+    return key
 
 BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 
@@ -65,11 +72,12 @@ RAW_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def fetch_series(series_id: str) -> pd.DataFrame:
+    api_key = get_api_key()
     resp = requests.get(
         BASE_URL,
         params={
             "series_id": series_id,
-            "api_key": API_KEY,
+            "api_key": api_key,
             "file_type": "json",
         },
         timeout=20,
@@ -84,6 +92,9 @@ def fetch_series(series_id: str) -> pd.DataFrame:
 
 
 def main():
+    api_key = get_api_key()
+    if not api_key:
+        sys.exit("ERROR: Set the FRED_API_KEY environment variable before running this script.")
     all_frames = []
     print(f"Pulling {len(SERIES)} series from FRED...\n")
 
