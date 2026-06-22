@@ -1,9 +1,6 @@
 """
 Macro Dashboard — Streamlit app.
-Reads data/fred_master.parquet (produced by fred_pull.py).
-On first load, auto-pulls from FRED if data is missing.
-Sidebar: manual Refresh button.
-Tabs: Single Series | Overlay
+Tabs: Single Series | Overlay | News & Calendar
 """
 
 import streamlit as st
@@ -11,7 +8,9 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pathlib import Path
+from datetime import date
 import fred_pull
+import news_feed
 
 st.set_page_config(page_title="Macro Dashboard", layout="wide")
 
@@ -54,6 +53,11 @@ def load_data():
     return df
 
 
+@st.cache_data(ttl=3600)
+def load_news():
+    return news_feed.fetch_all_news()
+
+
 def series_label(s):
     return f"{SERIES_LABELS.get(s, s)} ({s})"
 
@@ -86,15 +90,10 @@ def single_chart_tab(df, available):
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=sdf["date"], y=sdf["value"],
-        mode="lines", line=dict(width=2, color="#2962ff"),
-        name=series_id,
+        mode="lines", line=dict(width=2, color="#2962ff"), name=series_id,
     ))
-    fig.update_layout(
-        height=480,
-        margin=dict(l=20, r=20, t=20, b=20),
-        yaxis_title=SERIES_LABELS.get(series_id, series_id),
-        template="plotly_white",
-    )
+    fig.update_layout(height=480, margin=dict(l=20, r=20, t=20, b=20),
+                      yaxis_title=SERIES_LABELS.get(series_id, series_id), template="plotly_white")
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("Raw data"):
@@ -118,30 +117,84 @@ def overlay_chart_tab(df, available):
     for col, sdf, sid in [(m1, sdf1, s1), (m2, sdf2, s2)]:
         latest = sdf.iloc[-1]
         prior = sdf.iloc[-2] if len(sdf) > 1 else latest
-        col.metric(SERIES_LABELS.get(sid, sid), f"{latest['value']:,.2f}", f"{latest['value'] - prior['value']:+.2f}")
+        col.metric(SERIES_LABELS.get(sid, sid), f"{latest['value']:,.2f}",
+                   f"{latest['value'] - prior['value']:+.2f}")
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_trace(
-        go.Scatter(x=sdf1["date"], y=sdf1["value"], mode="lines",
-                   line=dict(width=2, color="#2962ff"), name=SERIES_LABELS.get(s1, s1)),
-        secondary_y=False,
-    )
-    fig.add_trace(
-        go.Scatter(x=sdf2["date"], y=sdf2["value"], mode="lines",
-                   line=dict(width=2, color="#e53935"), name=SERIES_LABELS.get(s2, s2)),
-        secondary_y=True,
-    )
+    fig.add_trace(go.Scatter(x=sdf1["date"], y=sdf1["value"], mode="lines",
+                             line=dict(width=2, color="#2962ff"), name=SERIES_LABELS.get(s1, s1)),
+                  secondary_y=False)
+    fig.add_trace(go.Scatter(x=sdf2["date"], y=sdf2["value"], mode="lines",
+                             line=dict(width=2, color="#e53935"), name=SERIES_LABELS.get(s2, s2)),
+                  secondary_y=True)
     fig.update_yaxes(title_text=SERIES_LABELS.get(s1, s1), title_font=dict(color="#2962ff"),
                      tickfont=dict(color="#2962ff"), secondary_y=False)
     fig.update_yaxes(title_text=SERIES_LABELS.get(s2, s2), title_font=dict(color="#e53935"),
                      tickfont=dict(color="#e53935"), secondary_y=True)
-    fig.update_layout(
-        height=500,
-        margin=dict(l=20, r=60, t=20, b=20),
-        template="plotly_white",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
-    )
+    fig.update_layout(height=500, margin=dict(l=20, r=60, t=20, b=20), template="plotly_white",
+                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
     st.plotly_chart(fig, use_container_width=True)
+
+
+def news_tab():
+    st.subheader("Economic Calendar & Headlines")
+
+    if st.button("🔄 Refresh news"):
+        st.cache_data.clear()
+        st.rerun()
+
+    with st.spinner("Loading news..."):
+        data = load_news()
+
+    # --- Economic Calendar ---
+    st.markdown("#### 📅 Upcoming Data Releases (next 14 days)")
+    calendar = data.get("calendar", [])
+    if calendar:
+        today_str = date.today().isoformat()
+        # Group by date
+        by_date = {}
+        for item in calendar:
+            by_date.setdefault(item["date"], []).append(item)
+
+        for release_date, items in sorted(by_date.items()):
+            label = "**Today**" if release_date == today_str else release_date
+            tier1 = [i["release_name"] for i in items if i.get("tier1")]
+            others = [i["release_name"] for i in items if not i.get("tier1")]
+            with st.expander(f"{label} — {len(items)} release(s)" + (" 🔴" if tier1 else ""), expanded=(release_date == today_str)):
+                if tier1:
+                    for name in tier1:
+                        st.markdown(f"🔴 **{name}**")
+                for name in others:
+                    st.markdown(f"&nbsp;&nbsp;• {name}")
+    else:
+        st.info("No upcoming releases found.")
+
+    st.divider()
+
+    # --- News Headlines ---
+    col_fed, col_bea = st.columns(2)
+
+    with col_fed:
+        st.markdown("#### 🏦 Federal Reserve")
+        for item in data.get("fed", []):
+            title = item.get("title", "")
+            link = item.get("link", "")
+            if title:
+                if link:
+                    st.markdown(f"- [{title}]({link})")
+                else:
+                    st.markdown(f"- {title}")
+
+    with col_bea:
+        st.markdown("#### 📊 BEA Releases")
+        for item in data.get("bea", []):
+            title = item.get("title", "")
+            link = item.get("link", "")
+            if title:
+                if link:
+                    st.markdown(f"- [{title}]({link})")
+                else:
+                    st.markdown(f"- {title}")
 
 
 def main():
@@ -166,11 +219,13 @@ def main():
 
     available = [s for s in SERIES_LABELS if s in df["series_id"].unique()]
 
-    tab1, tab2 = st.tabs(["Single Series", "Overlay"])
+    tab1, tab2, tab3 = st.tabs(["Single Series", "Overlay", "News & Calendar"])
     with tab1:
         single_chart_tab(df, available)
     with tab2:
         overlay_chart_tab(df, available)
+    with tab3:
+        news_tab()
 
 
 if __name__ == "__main__":
