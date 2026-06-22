@@ -68,6 +68,8 @@ SERIES = {
     "DTWEXBGS":     "Trade-Weighted US Dollar Index",
     "BAMLH0A0HYM2": "HY Credit Spread (OAS)",
     "BAMLC0A0CM":   "IG Credit Spread (OAS)",
+    # Recession indicator (used for chart shading, not shown in scoreboard)
+    "USREC":        "US Recession Indicator",
 }
 
 OUTPUT_DIR = Path("data")
