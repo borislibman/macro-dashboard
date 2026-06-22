@@ -12,6 +12,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from pathlib import Path
+import fred_pull
 
 st.set_page_config(page_title="Macro Dashboard", layout="wide")
 
@@ -52,8 +53,9 @@ def main():
     st.title("Macro Dashboard")
 
     if not DATA_PATH.exists():
-        st.error(f"No data found at {DATA_PATH}. Run `python fred_pull.py` first.")
-        return
+        with st.spinner("Pulling data from FRED — this takes ~30 seconds on first load..."):
+            fred_pull.main()
+        st.cache_data.clear()
 
     df = load_data()
     last_updated = df["date"].max().date()
