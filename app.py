@@ -14,26 +14,39 @@ import fred_pull
 st.set_page_config(page_title="Macro Dashboard", layout="wide")
 
 SERIES_LABELS = {
+    # Rates / curve
     "DGS2":         "2-Year Treasury Yield",
     "DGS10":        "10-Year Treasury Yield",
     "DGS30":        "30-Year Treasury Yield",
     "T10Y2Y":       "10Y-2Y Treasury Spread",
     "T10Y3M":       "10Y-3M Treasury Spread",
     "FEDFUNDS":     "Effective Federal Funds Rate",
+    # Inflation
     "CPIAUCSL":     "CPI All Items (SA)",
     "CPILFESL":     "Core CPI (ex Food & Energy, SA)",
     "PCEPI":        "PCE Price Index",
     "PCEPILFE":     "Core PCE Price Index",
+    "T10YIE":       "10-Year Breakeven Inflation Rate",
+    # Labor
     "UNRATE":       "Unemployment Rate",
     "PAYEMS":       "Nonfarm Payrolls",
     "ICSA":         "Initial Jobless Claims",
+    # Growth
     "GDP":          "Nominal GDP",
     "GDPC1":        "Real GDP",
     "INDPRO":       "Industrial Production Index",
+    # Consumer
     "RSAFS":        "Retail Sales",
     "UMCSENT":      "U. Michigan Consumer Sentiment",
+    # Housing
     "HOUST":        "Housing Starts",
     "MORTGAGE30US": "30-Year Fixed Mortgage Rate",
+    # Risk / markets
+    "VIXCLS":       "VIX (CBOE Volatility Index)",
+    "DCOILWTICO":   "WTI Crude Oil Price",
+    "DTWEXBGS":     "Trade-Weighted US Dollar Index",
+    "BAMLH0A0HYM2": "HY Credit Spread (OAS)",
+    "BAMLC0A0CM":   "IG Credit Spread (OAS)",
 }
 
 DATA_PATH = Path("data/fred_master.parquet")
