@@ -2,7 +2,8 @@
 Macro Dashboard — Streamlit app.
 Reads data/fred_master.parquet (produced by fred_pull.py).
 On first load, auto-pulls from FRED if data is missing.
-Sidebar has a manual Refresh button.
+Sidebar: manual Refresh button.
+Main: single-series chart tab + dual-series overlay tab.
 """
 
 import streamlit as st
@@ -59,42 +60,18 @@ def load_data():
     return df
 
 
-def main():
-    st.title("Macro Dashboard")
+def series_label(s):
+    return f"{SERIES_LABELS.get(s, s)} ({s})"
 
-    # Auto-pull on first load if no data exists
-    if not DATA_PATH.exists():
-        with st.spinner("Pulling data from FRED — this takes ~30 seconds on first load..."):
-            fred_pull.main()
-        st.cache_data.clear()
 
-    # Sidebar
-    with st.sidebar:
-        st.header("Data")
-        if st.button("🔄 Refresh from FRED"):
-            with st.spinner("Pulling latest data from FRED..."):
-                fred_pull.main()
-            st.cache_data.clear()
-            st.rerun()
-
-    df = load_data()
-    last_updated = df["date"].max().date()
-    st.caption(f"Data through {last_updated} — source: FRED")
-
-    available = [s for s in SERIES_LABELS if s in df["series_id"].unique()]
-
+def single_chart_tab(df, available):
     col_picker, col_range = st.columns([2, 1])
     with col_picker:
-        series_id = st.selectbox(
-            "Series",
-            options=available,
-            format_func=lambda s: f"{SERIES_LABELS.get(s, s)} ({s})",
-        )
+        series_id = st.selectbox("Series", options=available, format_func=series_label, key="single_series")
     with col_range:
-        years_back = st.selectbox("Range", [1, 3, 5, 10, 20, "All"], index=2)
+        years_back = st.selectbox("Range", [1, 3, 5, 10, 20, "All"], index=2, key="single_range")
 
     sdf = df[df["series_id"] == series_id].sort_values("date")
-
     if years_back != "All":
         cutoff = sdf["date"].max() - pd.DateOffset(years=years_back)
         sdf = sdf[sdf["date"] >= cutoff]
@@ -125,6 +102,107 @@ def main():
 
     with st.expander("Raw data"):
         st.dataframe(sdf[["date", "value"]].sort_values("date", ascending=False), use_container_width=True)
+
+
+def overlay_chart_tab(df, available):
+    st.subheader("Overlay two series")
+    col1, col2, col_range = st.columns([2, 2, 1])
+    with col1:
+        s1 = st.selectbox("Series 1", options=available, format_func=series_label,
+                          index=1, key="overlay_s1")  # default DGS10
+    with col2:
+        s2 = st.selectbox("Series 2", options=available, format_func=series_label,
+                          index=6, key="overlay_s2")  # default CPIAUCSL
+    with col_range:
+        years_back = st.selectbox("Range", [1, 3, 5, 10, 20, "All"], index=2, key="overlay_range")
+
+    def get_sdf(sid):
+        sdf = df[df["series_id"] == sid].sort_values("date")
+        if years_back != "All":
+            cutoff = sdf["date"].max() - pd.DateOffset(years=years_back)
+            sdf = sdf[sdf["date"] >= cutoff]
+        return sdf
+
+    sdf1 = get_sdf(s1)
+    sdf2 = get_sdf(s2)
+
+    # Metrics row
+    def show_metric(col, sdf, sid):
+        latest = sdf.iloc[-1]
+        prior = sdf.iloc[-2] if len(sdf) > 1 else latest
+        col.metric(
+            f"{SERIES_LABELS.get(sid, sid)}",
+            f"{latest['value']:,.2f}",
+            f"{latest['value'] - prior['value']:+.2f}",
+        )
+
+    m1, m2 = st.columns(2)
+    show_metric(m1, sdf1, s1)
+    show_metric(m2, sdf2, s2)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=sdf1["date"], y=sdf1["value"],
+        mode="lines", line=dict(width=2, color="#2962ff"),
+        name=SERIES_LABELS.get(s1, s1),
+        yaxis="y1",
+    ))
+    fig.add_trace(go.Scatter(
+        x=sdf2["date"], y=sdf2["value"],
+        mode="lines", line=dict(width=2, color="#e53935"),
+        name=SERIES_LABELS.get(s2, s2),
+        yaxis="y2",
+    ))
+    fig.update_layout(
+        height=500,
+        margin=dict(l=20, r=60, t=20, b=20),
+        template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        yaxis=dict(
+            title=SERIES_LABELS.get(s1, s1),
+            titlefont=dict(color="#2962ff"),
+            tickfont=dict(color="#2962ff"),
+        ),
+        yaxis2=dict(
+            title=SERIES_LABELS.get(s2, s2),
+            titlefont=dict(color="#e53935"),
+            tickfont=dict(color="#e53935"),
+            overlaying="y",
+            side="right",
+        ),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def main():
+    st.title("Macro Dashboard")
+
+    # Auto-pull on first load
+    if not DATA_PATH.exists():
+        with st.spinner("Pulling data from FRED — this takes ~30 seconds on first load..."):
+            fred_pull.main()
+        st.cache_data.clear()
+
+    # Sidebar
+    with st.sidebar:
+        st.header("Data")
+        if st.button("🔄 Refresh from FRED"):
+            with st.spinner("Pulling latest data from FRED..."):
+                fred_pull.main()
+            st.cache_data.clear()
+            st.rerun()
+
+    df = load_data()
+    last_updated = df["date"].max().date()
+    st.caption(f"Data through {last_updated} — source: FRED")
+
+    available = [s for s in SERIES_LABELS if s in df["series_id"].unique()]
+
+    tab1, tab2 = st.tabs(["Single Series", "Overlay"])
+    with tab1:
+        single_chart_tab(df, available)
+    with tab2:
+        overlay_chart_tab(df, available)
 
 
 if __name__ == "__main__":
