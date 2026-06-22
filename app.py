@@ -1,11 +1,8 @@
 """
-Minimal Streamlit dashboard for the FRED macro data pull.
-
-Reads data/fred_master.parquet (produced by fred_pull.py) and renders
-a series picker with a line chart and latest-value summary.
-
-Usage:
-    streamlit run app.py
+Macro Dashboard — Streamlit app.
+Reads data/fred_master.parquet (produced by fred_pull.py).
+On first load, auto-pulls from FRED if data is missing.
+Sidebar has a manual Refresh button.
 """
 
 import streamlit as st
@@ -17,24 +14,24 @@ import fred_pull
 st.set_page_config(page_title="Macro Dashboard", layout="wide")
 
 SERIES_LABELS = {
-    "DGS2":     "2-Year Treasury Yield",
-    "DGS10":    "10-Year Treasury Yield",
-    "DGS30":    "30-Year Treasury Yield",
-    "T10Y2Y":   "10Y-2Y Treasury Spread",
-    "T10Y3M":   "10Y-3M Treasury Spread",
-    "FEDFUNDS": "Effective Federal Funds Rate",
-    "CPIAUCSL": "CPI All Items (SA)",
-    "CPILFESL": "Core CPI (ex Food & Energy, SA)",
-    "PCEPI":    "PCE Price Index",
-    "PCEPILFE": "Core PCE Price Index",
-    "UNRATE":   "Unemployment Rate",
-    "PAYEMS":   "Nonfarm Payrolls",
-    "ICSA":     "Initial Jobless Claims",
-    "GDP":      "Nominal GDP",
-    "GDPC1":    "Real GDP",
-    "INDPRO":   "Industrial Production Index",
-    "RSAFS":    "Retail Sales",
-    "UMCSENT":  "U. Michigan Consumer Sentiment",
+    "DGS2":         "2-Year Treasury Yield",
+    "DGS10":        "10-Year Treasury Yield",
+    "DGS30":        "30-Year Treasury Yield",
+    "T10Y2Y":       "10Y-2Y Treasury Spread",
+    "T10Y3M":       "10Y-3M Treasury Spread",
+    "FEDFUNDS":     "Effective Federal Funds Rate",
+    "CPIAUCSL":     "CPI All Items (SA)",
+    "CPILFESL":     "Core CPI (ex Food & Energy, SA)",
+    "PCEPI":        "PCE Price Index",
+    "PCEPILFE":     "Core PCE Price Index",
+    "UNRATE":       "Unemployment Rate",
+    "PAYEMS":       "Nonfarm Payrolls",
+    "ICSA":         "Initial Jobless Claims",
+    "GDP":          "Nominal GDP",
+    "GDPC1":        "Real GDP",
+    "INDPRO":       "Industrial Production Index",
+    "RSAFS":        "Retail Sales",
+    "UMCSENT":      "U. Michigan Consumer Sentiment",
     "HOUST":        "Housing Starts",
     "MORTGAGE30US": "30-Year Fixed Mortgage Rate",
 }
@@ -52,10 +49,20 @@ def load_data():
 def main():
     st.title("Macro Dashboard")
 
+    # Auto-pull on first load if no data exists
     if not DATA_PATH.exists():
         with st.spinner("Pulling data from FRED — this takes ~30 seconds on first load..."):
             fred_pull.main()
         st.cache_data.clear()
+
+    # Sidebar
+    with st.sidebar:
+        st.header("Data")
+        if st.button("🔄 Refresh from FRED"):
+            with st.spinner("Pulling latest data from FRED..."):
+                fred_pull.main()
+            st.cache_data.clear()
+            st.rerun()
 
     df = load_data()
     last_updated = df["date"].max().date()
